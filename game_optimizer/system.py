@@ -11,7 +11,8 @@ import subprocess
 import time
 import xml.etree.ElementTree as ET
 
-from .config import APPS
+from .config import APPS, gpu_vendor
+from .intel import read_intel_gpus
 
 
 @dataclass
@@ -141,6 +142,57 @@ def parse_nvidia_xml(raw: str) -> list[dict]:
     return gpus
 
 
+def read_amd_gpus(drm_root: Path = Path("/sys/class/drm")) -> list[dict]:
+    """Read AMDGPU counters in bytes; GTT is reported separately from VRAM."""
+    gpus, seen = [], set()
+    for card in sorted(drm_root.glob("card*")):
+        if not re.fullmatch(r"card\d+", card.name):
+            continue
+        device = card / "device"
+        try:
+            if int((device / "vendor").read_text().strip(), 16) != 0x1002:
+                continue
+            physical = device.resolve(strict=True)
+            if (device / "driver").resolve(strict=True).name != "amdgpu" or physical in seen:
+                continue
+            total = int((device / "mem_info_vram_total").read_text())
+            used = int((device / "mem_info_vram_used").read_text())
+            if total <= 0 or used < 0:
+                continue
+        except (OSError, ValueError):
+            continue
+        try:
+            product = (device / "product_name").read_text().strip()
+        except OSError:
+            product = ""
+        gpu = {"id": physical.name, "vendor": "AMD", "backend": "amdgpu-sysfs", "card": card.name,
+               "name": product or f"AMD GPU ({physical.name})", "total_mib": total / 1048576,
+               "used_mib": used / 1048576, "free_mib": max(0, total - used) / 1048576, "processes": []}
+        for source, key in (("mem_info_gtt_total", "gtt_total_mib"), ("mem_info_gtt_used", "gtt_used_mib")):
+            try:
+                value = int((device / source).read_text())
+                if value >= 0:
+                    gpu[key] = value / 1048576
+            except (OSError, ValueError):
+                pass
+        seen.add(physical)
+        gpus.append(gpu)
+    return gpus
+
+
+def gpu_memory_text(gpu: dict) -> str:
+    """Describe partial readings without presenting shared RAM as free VRAM."""
+    name = gpu["name"]
+    if gpu.get("memory_kind") == "shared":
+        return f"{name}: pamięć współdzielona z RAM; brak osobnej puli VRAM."
+    if gpu.get("total_mib") is None:
+        return f"{name}: {gpu.get('memory_note') or 'Brak odczytu VRAM.'}"
+    if gpu.get("used_mib") is None or gpu.get("free_mib") is None:
+        return f"{name}: {gpu['total_mib']:.0f} MiB VRAM; {gpu.get('memory_note') or 'brak odczytu zajętości.'}"
+    return (f"{name}: używane {gpu['used_mib']:.0f} / {gpu['total_mib']:.0f} MiB VRAM; "
+            f"wolne {gpu['free_mib']:.0f} MiB")
+
+
 class System:
     def run(self, args: list[str], timeout: float = 12) -> Result:
         try:
@@ -214,7 +266,7 @@ class System:
                 "swap_total_mib": values.get("SwapTotal", 0),
                 "swap_free_mib": values.get("SwapFree", 0)}
 
-    def gpus(self, include_processes: bool = False) -> list[dict]:
+    def nvidia_gpus(self, include_processes: bool = False) -> list[dict]:
         if shutil.which("nvidia-smi"):
             if include_processes:
                 result = self.run(["nvidia-smi", "-q", "-x"], timeout=5)
@@ -240,20 +292,17 @@ class System:
                                  "processes": []})
                 if gpus:
                     return gpus
-        gpus = []
-        for device in sorted(Path("/sys/class/drm").glob("card[0-9]*/device")):
-            if not re.fullmatch(r"card\d+", device.parent.name):
-                continue
-            try:
-                total = int((device / "mem_info_vram_total").read_text()) / 1048576
-                used = int((device / "mem_info_vram_used").read_text()) / 1048576
-                vendor = (device / "vendor").read_text().strip()
-                if total > 0:
-                    gpus.append({"id": device.parent.name, "vendor": vendor,
-                                 "name": f"AMD / DRM {device.parent.name}", "total_mib": total,
-                                 "used_mib": used, "free_mib": max(0, total - used), "processes": []})
-            except (OSError, ValueError):
-                continue
+        return []
+
+    def gpus(self, include_processes: bool = False, vendor: str | None = None) -> list[dict]:
+        selected = gpu_vendor() if vendor is None else vendor
+        if selected not in ("auto", "nvidia", "amd", "intel"):
+            raise ValueError("Nieobsługiwany producent GPU.")
+        gpus = self.nvidia_gpus(include_processes) if selected in ("auto", "nvidia") else []
+        if selected in ("auto", "amd"):
+            gpus.extend(read_amd_gpus())
+        if selected in ("auto", "intel"):
+            gpus.extend(read_intel_gpus())
         return gpus
 
     def snapshot(self, include_processes: bool = False) -> dict:
@@ -311,6 +360,7 @@ def diagnostic(system: System | None = None) -> dict:
     backend = desktop.compositor_backend
     manager_matches = backend not in ("xfwm4", "marco") or (system.window_manager_name() or "").casefold() == backend
     return {"session": session_type(), "desktop": os.environ.get("XDG_CURRENT_DESKTOP", "?"),
+            "gpu_vendor": gpu_vendor(),
             "memory": system.snapshot(include_processes=True),
             "desktop_support": desktop.to_dict(),
             "compositor": compositor_active(system, backend) if backend and manager_matches else None,

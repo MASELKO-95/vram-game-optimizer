@@ -8,6 +8,8 @@
 
 <p align="center">
   <a href="https://github.com/MASELKO-95/vram-game-optimizer/releases/tag/v0.3.0-nvidia">NVIDIA release</a> ·
+  <a href="https://github.com/MASELKO-95/vram-game-optimizer/releases/tag/v0.3.0-amd">AMD release</a> ·
+  <a href="https://github.com/MASELKO-95/vram-game-optimizer/releases/tag/v0.3.0-intel">Intel release</a> ·
   <a href="#quick-start">Quick start</a> ·
   <a href="#gpu-support--roadmap">GPU roadmap</a> ·
   <a href="docs/README.pl.md">Polski</a> ·
@@ -16,18 +18,24 @@
 
 A lightweight Linux tool that helps reclaim VRAM and RAM used by your desktop and background apps. Choose a Steam game with the arrow keys, select a profile, and launch it from your terminal. The optimizer applies supported desktop changes and process priorities, then restores the previous desktop state when the game closes.
 
-**The first public release targets NVIDIA GPUs.** AMD is the next planned vendor release. Intel support will be evaluated for integrated and discrete graphics, with a separate release if additional support is needed.
+**Separate NVIDIA, AMD and Intel previews are available.** Choose the package matching the GPU you want to monitor. AMD and Intel monitoring has been checked with simulated driver data; validation on physical AMD and Intel hardware is still pending.
 
 ## Download
 
-**v0.3.0-nvidia · NVIDIA preview · Linux**
+**v0.3.0 · Linux previews · Python 3.10+ · BSD-3-Clause**
 
 | Download | Use |
 | --- | --- |
 | [NVIDIA Linux package — tar.gz](https://github.com/MASELKO-95/vram-game-optimizer/releases/download/v0.3.0-nvidia/vram-game-optimizer-0.3.0-nvidia-linux.tar.gz) | Recommended for Linux |
 | [NVIDIA Linux package — ZIP](https://github.com/MASELKO-95/vram-game-optimizer/releases/download/v0.3.0-nvidia/vram-game-optimizer-0.3.0-nvidia-linux.zip) | Alternative archive |
-| [SHA-256 checksums](https://github.com/MASELKO-95/vram-game-optimizer/releases/download/v0.3.0-nvidia/SHA256SUMS) | Verify your download |
-| [Release notes](https://github.com/MASELKO-95/vram-game-optimizer/releases/tag/v0.3.0-nvidia) | Features and current limits |
+| [AMD Linux package — tar.gz](https://github.com/MASELKO-95/vram-game-optimizer/releases/download/v0.3.0-amd/vram-game-optimizer-0.3.0-amd-linux.tar.gz) | AMDGPU monitoring |
+| [AMD Linux package — ZIP](https://github.com/MASELKO-95/vram-game-optimizer/releases/download/v0.3.0-amd/vram-game-optimizer-0.3.0-amd-linux.zip) | Alternative AMD archive |
+| [AMD SHA-256 checksums](https://github.com/MASELKO-95/vram-game-optimizer/releases/download/v0.3.0-amd/SHA256SUMS) | Verify the AMD package |
+| [Intel Linux package — tar.gz](https://github.com/MASELKO-95/vram-game-optimizer/releases/download/v0.3.0-intel/vram-game-optimizer-0.3.0-intel-linux.tar.gz) | Intel i915/Xe monitoring |
+| [Intel Linux package — ZIP](https://github.com/MASELKO-95/vram-game-optimizer/releases/download/v0.3.0-intel/vram-game-optimizer-0.3.0-intel-linux.zip) | Alternative Intel archive |
+| [Intel SHA-256 checksums](https://github.com/MASELKO-95/vram-game-optimizer/releases/download/v0.3.0-intel/SHA256SUMS) | Verify the Intel package |
+| [NVIDIA SHA-256 checksums](https://github.com/MASELKO-95/vram-game-optimizer/releases/download/v0.3.0-nvidia/SHA256SUMS) | Verify the NVIDIA package |
+| [All releases](https://github.com/MASELKO-95/vram-game-optimizer/releases) | Release notes and current limits |
 
 The archives contain the application and its Python source. They require **Python 3.10+** on your system. A virtual environment and pip packages are unnecessary.
 
@@ -47,7 +55,9 @@ The archives contain the application and its Python source. They require **Pytho
 Requirements:
 
 - Linux with Python 3.10+.
-- A working NVIDIA driver and `nvidia-smi` for NVIDIA memory monitoring.
+- For NVIDIA monitoring: a working NVIDIA driver and `nvidia-smi`.
+- For AMD monitoring: the kernel `amdgpu` driver with readable sysfs memory counters.
+- For Intel monitoring: the kernel `i915` or `xe` driver with memory-query support and access to its `/dev/dri` device. Missing measurements do not block the launcher.
 - The native Steam client, already running and signed in.
 - Optional: GameMode; Tk for the graphical interface.
 
@@ -76,6 +86,14 @@ The application interface is currently in **Polish**. These instructions and the
 
 If you downloaded the ZIP and the launcher is not executable, run `chmod +x game-optimizer` once.
 
+For AMD, extract `vram-game-optimizer-0.3.0-amd-linux.tar.gz` and enter `vram-game-optimizer-0.3.0-amd` before running the same launcher.
+
+For Intel, extract `vram-game-optimizer-0.3.0-intel-linux.tar.gz` and enter `vram-game-optimizer-0.3.0-intel` before running the same launcher.
+
+Each package monitors its own GPU vendor, including on hybrid systems. The installer preserves that selection. AMD and Intel packages do not invoke `nvidia-smi`. This selects monitoring; it does not change which GPU renders a game.
+
+AMD GTT is shown separately from VRAM; on APUs, the VRAM region may be reserved system RAM. Intel queries distinguish dedicated memory on discrete GPUs from shared system memory on integrated GPUs. Shared RAM is never presented as a separate pool of free VRAM. Some Intel kernels restrict usage counters; ambiguous zero usage is shown as unavailable while the reported capacity remains visible. The optimizer continues with the supported desktop and process features.
+
 ## Profiles
 
 | Profile | Behavior |
@@ -91,10 +109,10 @@ The optional app list includes Discord, Spotify, Telegram, Firefox and Chromium.
 | Vendor | Release status | Scope |
 | --- | --- | --- |
 | **NVIDIA** | **First public preview: v0.3.0-nvidia** | VRAM totals, usage, free memory and graphics/compute process reporting through `nvidia-smi` |
-| **AMD** | **Next vendor release planned** | A basic DRM/sysfs memory reader is already present; hardware validation and vendor-specific improvements are pending |
-| **Intel** | **Under evaluation** | Assess telemetry and memory handling for integrated and discrete graphics; publish a dedicated release if needed |
+| **AMD** | **Preview: v0.3.0-amd** | AMDGPU/sysfs VRAM and optional separate GTT counters; physical AMD validation is pending |
+| **Intel** | **Preview: v0.3.0-intel** | i915/Xe DRM memory queries; dedicated/shared-memory distinction and explicit unavailable readings; physical Intel validation is pending |
 
-Future vendor releases will be offered as downloads on the [Releases page](https://github.com/MASELKO-95/vram-game-optimizer/releases). AMD and Intel release packages are not available yet.
+All three vendor packages are listed on the [Releases page](https://github.com/MASELKO-95/vram-game-optimizer/releases). AMD and Intel are previews checked with simulated sysfs/DRM responses; no physical AMD or Intel GPU was available for validation. Per-process GPU memory reporting is currently available for NVIDIA only. Intel query layouts and accounting limits follow the [Linux DRM user API](https://docs.kernel.org/gpu/driver-uapi.html).
 
 Desktop cleanup, Steam integration, process priorities and app management share a common core. Vendor releases will focus on the monitoring and validation needed for each GPU family.
 
@@ -174,10 +192,12 @@ For advanced options, Steam wrappers and recovery details, see the [Polish usage
 ## Build a release package
 
 ```bash
-python3 -B tools/build_release.py
+python3 -B tools/build_release.py --vendor nvidia
+python3 -B tools/build_release.py --vendor amd
+python3 -B tools/build_release.py --vendor intel
 ```
 
-The NVIDIA archives and `SHA256SUMS` are written to `dist/`. Packages contain the application, documentation, icon and installer.
+Archives and `SHA256SUMS` are written to `dist/nvidia/`, `dist/amd/` or `dist/intel/`. Packages contain the application, documentation, icon and installer.
 
 ## License
 

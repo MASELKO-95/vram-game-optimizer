@@ -1,6 +1,8 @@
 # VRAM Game Optimizer
 
-Dokumentacja po polsku. Bieżące wydanie NVIDIA i pliki do pobrania: [strona projektu](../README.md#download). Wydanie AMD jest planowane, a osobne wydanie Intel powstanie, jeśli będzie wymagało dodatkowej obsługi.
+Dokumentacja po polsku. Osobne wydania NVIDIA, AMD i Intel oraz pliki do pobrania: [strona projektu](../README.md#download). AMD korzysta z AMDGPU/sysfs, Intel z zapytań DRM sterowników i915 oraz xe. Oba nowe warianty są wydaniami preview, sprawdzonymi na przykładowych danych sterowników; weryfikacja na fizycznych kartach AMD i Intel pozostaje do wykonania.
+
+Wersja Intel rozróżnia lokalny VRAM kart dedykowanych i RAM współdzielony przez integrę. Brak lub ograniczenie odczytu zajętości jest pokazane wprost. Niejednoznaczne zerowe użycie nie jest przedstawiane jako całkowicie wolny VRAM. Priorytety, profile pulpitu i uruchamianie gier działają także bez pomiaru GPU. Pakiety AMD i Intel nie wywołują nvidia-smi, a instalator zachowuje wybrany wariant. Wybór wariantu dotyczy pomiaru pamięci; nie przełącza karty używanej do renderowania gry.
 
 A lightweight tool that helps reclaim VRAM and RAM used by your Linux desktop and background apps. Pick a Steam game, choose an optimization profile, and automatically restore your desktop when the game closes.
 

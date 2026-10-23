@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build clean NVIDIA source packages using the Python standard library."""
+"""Build vendor source packages using the Python standard library."""
 from __future__ import annotations
 
 import argparse
@@ -31,22 +31,31 @@ def source_files() -> list[Path]:
     paths = [ROOT / name for name in (".gitignore", "README.md", "LICENSE", "RELEASE_NOTES.md", "game-optimizer",
                                       "assets/game-optimizer.svg", "tools/install.py", "tools/build_release.py")]
     paths.extend(sorted((ROOT / "game_optimizer").glob("*.py")))
-    paths.extend(sorted((ROOT / "docs").glob("*.md")))
+    paths.extend(sorted((ROOT / "docs").rglob("*.md")))
     for path in paths:
         if not path.is_file() or path.is_symlink():
             raise ValueError(f"Missing regular release file: {path.relative_to(ROOT)}")
     return sorted(paths)
 
 
-def build(output: Path) -> dict:
+def build(output: Path, vendor: str = "nvidia") -> dict:
+    if vendor not in ("nvidia", "amd", "intel"):
+        raise ValueError("Choose nvidia, amd or intel.")
     app_version = version()
-    release_version = app_version + "-nvidia"
+    release_version = app_version + "-" + vendor
     package = "vram-game-optimizer-" + release_version
     archive_name = package + "-linux"
     entries = {path.relative_to(ROOT).as_posix(): path.read_bytes() for path in source_files()}
+    notes = ROOT / "docs/releases" / ("v" + release_version + ".md")
+    if not notes.is_file():
+        raise ValueError(f"Missing release notes for {release_version}.")
+    entries["RELEASE_NOTES.md"] = notes.read_bytes()
     entries["release.json"] = (json.dumps({
         "name": "VRAM Game Optimizer", "version": app_version,
-        "tag": "v" + release_version, "vendor": "nvidia", "platform": "linux",
+        "tag": "v" + release_version, "vendor": vendor, "platform": "linux",
+        "memory_backend": {"amd":"amdgpu-sysfs", "nvidia":"nvidia-smi", "intel":"i915-xe-drm-query"}[vendor],
+        "hardware_validation": "reference-system-only" if vendor == "nvidia" else "pending",
+        "release_status": "preview",
         "license": "BSD-3-Clause", "python_requires": ">=3.10", "prerelease": True,
         "repository": "https://github.com/MASELKO-95/vram-game-optimizer",
     }, indent=2) + "\n").encode()
@@ -73,14 +82,17 @@ def build(output: Path) -> dict:
     checksums = output / "SHA256SUMS"
     checksums.write_text("".join(hashlib.sha256(path.read_bytes()).hexdigest() + "  " + path.name + "\n"
                                  for path in archives))
-    return {"tag": "v" + release_version, "root": package,
+    return {"tag": "v" + release_version, "root": package, "vendor": vendor,
+            "notes": str(notes),
             "files": [str(path) for path in (*archives, checksums)], "source_files": len(entries)}
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path, default=ROOT / "dist")
-    print(json.dumps(build(parser.parse_args().output), indent=2))
+    parser.add_argument("--vendor", choices=("nvidia", "amd", "intel"), default="nvidia")
+    parser.add_argument("--output", type=Path)
+    args = parser.parse_args()
+    print(json.dumps(build(args.output or ROOT / "dist" / args.vendor, args.vendor), indent=2))
 
 
 if __name__ == "__main__":

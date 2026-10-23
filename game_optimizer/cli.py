@@ -10,11 +10,11 @@ import subprocess
 import sys
 
 from . import __version__
-from .config import APPS, PROFILES, Profile
+from .config import APPS, PROFILES, Profile, gpu_vendor
 from .session import Session, execute_payload, guardian_main, plan, restore
 from .state import BusyError
 from .steam import installed_games, launch_options, native_steam_running
-from .system import diagnostic, executable, own_processes
+from .system import diagnostic, executable, gpu_memory_text, own_processes
 
 
 def profile_flags(parser: argparse.ArgumentParser) -> None:
@@ -82,7 +82,9 @@ def main(argv: list[str] | None = None) -> int:
         command = args.command[1:] if args.command[:1] == ["--"] else args.command
         return execute_payload(command, args.ready, args.nice) if command else 127
     parser = argparse.ArgumentParser(prog="game-optimizer", description="Tymczasowa optymalizacja gier dla Linux.")
-    parser.add_argument("--version", action="version", version=f"VRAM Game Optimizer {__version__}")
+    vendor = gpu_vendor()
+    suffix = f" ({vendor.upper()} preview)" if vendor != "auto" else ""
+    parser.add_argument("--version", action="version", version=f"VRAM Game Optimizer {__version__}{suffix}")
     commands = parser.add_subparsers(dest="action")
     commands.add_parser("menu", aliases=["tui"], help="Menu terminalowe: wybór gry i profilu strzałkami")
     commands.add_parser("gui", help="Otwórz aplikację graficzną")
@@ -148,17 +150,25 @@ def main(argv: list[str] | None = None) -> int:
                 print(json.dumps(data, ensure_ascii=False, indent=2))
                 return 0
             print(f"Pulpit: {data['desktop']}, sesja: {data['session']}")
+            print(f"Wariant GPU: {data['gpu_vendor'].upper()}")
             print(data["desktop_support"]["summary"])
             if data["desktop_support"]["compositor_backend"]:
                 state = "włączony" if data["compositor"] is True else ("wyłączony" if data["compositor"] is False else "brak potwierdzonego odczytu")
                 print(f"Kompozytor {data['desktop_support']['compositor_backend']}: {state}")
             for gpu in data["memory"]["gpus"]:
-                print(f"{gpu['name']}: używane {gpu['used_mib']:.0f} / {gpu['total_mib']:.0f} MiB VRAM; wolne {gpu['free_mib']:.0f} MiB")
+                print(gpu_memory_text(gpu))
+                if "gtt_used_mib" in gpu:
+                    print(f"  GTT: {gpu['gtt_used_mib']:.0f} MiB pamięci systemowej dostępnej dla GPU; osobno od VRAM.")
                 for proc in gpu.get("processes", []):
                     memory = f"{proc['used_mib']:.0f} MiB" if proc["used_mib"] is not None else "?"
                     print(f"  PID {proc['pid']}: {memory:>10}  {proc['name']}")
             if not data["memory"]["gpus"]:
-                print("Brak odczytu VRAM z nvidia-smi lub DRM. Optymalizacja może nadal działać.")
+                if data["gpu_vendor"] == "amd":
+                    print("Brak odczytu AMDGPU/sysfs. Sprawdź sterownik amdgpu i dostępność liczników pamięci.")
+                elif data["gpu_vendor"] == "intel":
+                    print("Brak wykrytej karty Intel ze sterownikiem i915 lub xe. Optymalizacja może nadal działać.")
+                else:
+                    print("Brak odczytu VRAM z nvidia-smi lub DRM. Optymalizacja może nadal działać.")
             ram = data["memory"]["ram"]
             if ram:
                 print(f"RAM dostępny: {ram['available_mib'] / 1024:.1f} / {ram['total_mib'] / 1024:.1f} GiB")

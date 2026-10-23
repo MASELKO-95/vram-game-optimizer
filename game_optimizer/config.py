@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
+import json
 import os
 
 
@@ -97,3 +98,15 @@ def state_directory() -> Path:
 def config_file() -> Path:
     base = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config")))
     return base / "game-optimizer/settings.json"
+
+
+def gpu_vendor() -> str:
+    """Select the archive's GPU family; source checkouts discover all families."""
+    value = os.environ.get("GAME_OPTIMIZER_GPU_VENDOR")
+    if value is None:
+        try:
+            data = json.loads((ENTRY.parent / "release.json").read_text())
+            value = data.get("vendor", "auto") if isinstance(data, dict) else "auto"
+        except (OSError, ValueError):
+            value = "auto"
+    return value.lower() if isinstance(value, str) and value.lower() in ("auto", "nvidia", "amd", "intel") else "auto"

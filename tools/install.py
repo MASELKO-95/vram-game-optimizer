@@ -23,6 +23,10 @@ def install(prefix: Path, autostart: bool = False) -> Path:
                     ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     for name in ("game-optimizer", "README.md", "RELEASE_NOTES.md", "LICENSE"):
         shutil.copy2(source / name, target / name)
+    if (source / "release.json").is_file():
+        shutil.copy2(source / "release.json", target / "release.json")
+    else:
+        (target / "release.json").unlink(missing_ok=True)
     shutil.copytree(source / "docs", target / "docs", dirs_exist_ok=True)
     (target / "assets").mkdir(exist_ok=True)
     shutil.copy2(source / "assets/game-optimizer.svg", target / "assets/game-optimizer.svg")

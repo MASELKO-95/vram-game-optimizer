@@ -18,7 +18,7 @@ from .config import (APPS, ENTRY, PROFILES, PROFILE_LABELS, Profile, config_file
 from .desktop import detect_desktop
 from .state import Store, atomic_json
 from .steam import installed_games, launch_options, profile_arguments
-from .system import System, diagnostic
+from .system import System, diagnostic, gpu_memory_text
 
 
 BG = "#10151d"
@@ -425,13 +425,20 @@ class App:
         gpus, ram = data["memory"]["gpus"], data["memory"]["ram"]
         if gpus:
             # Display the dedicated GPU with the largest memory budget.
-            gpu = max(gpus, key=lambda value: value["total_mib"])
-            self.metric_vars["vram"][0].set(f"{gpu['free_mib']:.0f} MiB")
-            self.metric_vars["vram"][1].set(f"Wolne z {gpu['total_mib']:.0f} MiB · {gpu['name'].replace('NVIDIA GeForce ', '')}\nUżywane: {gpu['used_mib']:.0f} MiB")
-            self.bars["vram"]["value"] = 100 * gpu["used_mib"] / max(1, gpu["total_mib"])
+            gpu = max(gpus, key=lambda value: value.get("total_mib") or 0)
+            if gpu.get("free_mib") is not None and gpu.get("used_mib") is not None:
+                self.metric_vars["vram"][0].set(f"{gpu['free_mib']:.0f} MiB")
+                self.metric_vars["vram"][1].set(f"Wolne z {gpu['total_mib']:.0f} MiB · {gpu['name'].replace('NVIDIA GeForce ', '')}\nUżywane: {gpu['used_mib']:.0f} MiB")
+                self.bars["vram"]["value"] = 100 * gpu["used_mib"] / max(1, gpu["total_mib"])
+            else:
+                shared = gpu.get("memory_kind") == "shared"
+                self.metric_vars["vram"][0].set("Współdzielony RAM" if shared else "Brak pomiaru")
+                self.metric_vars["vram"][1].set(gpu_memory_text(gpu))
+                self.bars["vram"]["value"] = 0
         else:
             self.metric_vars["vram"][0].set("Brak odczytu")
             self.metric_vars["vram"][1].set("Sterownik nie udostępnił pomiaru VRAM.")
+            self.bars["vram"]["value"] = 0
         if ram:
             self.metric_vars["ram"][0].set(f"{ram['available_mib'] / 1024:.1f} GiB")
             self.metric_vars["ram"][1].set(f"Dostępne z {ram['total_mib'] / 1024:.1f} GiB RAM")
@@ -463,7 +470,7 @@ class App:
             before = {gpu["id"]: gpu for gpu in (report.get("before") or {}).get("gpus", [])}
             entries = []
             for gpu in (report.get("prepared") or {}).get("gpus", []):
-                if gpu["id"] in before:
+                if gpu.get("free_mib") is not None and before.get(gpu["id"], {}).get("free_mib") is not None:
                     diff = gpu["free_mib"] - before[gpu["id"]]["free_mib"]
                     entries.append(f"Wolny VRAM przed uruchomieniem gry: zmiana {diff:+.0f} MiB")
             first, second = (report.get("before") or {}).get("ram", {}), (report.get("prepared") or {}).get("ram", {})

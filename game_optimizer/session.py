@@ -16,7 +16,7 @@ from .desktop import (compositor_snapshot, detect_desktop,
                       persistent_compositor_action, restore_compositor, set_compositor)
 from .state import BusyError, Store, atomic_json, boot_id, desktop_key
 from .system import (Result, System, app_processes, environment, identity, own_processes,
-                     process_alive, read_process, session_type)
+                     gpu_memory_text, process_alive, read_process, session_type)
 from .steam import SteamGame, game_processes, matches_game, native_steam_running
 
 
@@ -622,9 +622,12 @@ class Session:
         before, after = self.data["before"], self.data["prepared"]
         previous = {gpu["id"]: gpu for gpu in before.get("gpus", [])}
         for gpu in after.get("gpus", []):
-            if gpu["id"] in previous:
-                difference = gpu["free_mib"] - previous[gpu["id"]]["free_mib"]
+            old_free = previous.get(gpu["id"], {}).get("free_mib")
+            if gpu.get("free_mib") is not None and old_free is not None:
+                difference = gpu["free_mib"] - old_free
                 self.emit(f"VRAM {gpu['name']}: zmiana wolnej pamięci {difference:+.0f} MiB; wolne {gpu['free_mib']:.0f} MiB.")
+            else:
+                self.emit(gpu_memory_text(gpu))
         if before.get("ram") and after.get("ram"):
             difference = after["ram"]["available_mib"] - before["ram"]["available_mib"]
             self.emit(f"Zmiana dostępnego RAM: {difference:+.0f} MiB. Pomiar obejmuje cały system.")
