@@ -1,0 +1,6 @@
+#!/usr/bin/env python3
+"""Native Linux game launcher; no third-party Python dependencies."""
+from game_optimizer.cli import main
+
+if __name__ == "__main__":
+    raise SystemExit(main())

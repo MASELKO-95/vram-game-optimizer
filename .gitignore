@@ -218,3 +218,11 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+# VRAM Game Optimizer local files
+.local/
+.agents/
+.codex/
+.aws/
+.env.*
+!.env.example
+
